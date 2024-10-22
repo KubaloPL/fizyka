@@ -1,1 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .input-field {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .visualization {
+            margin-top: 20px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kalkulator reakcji belki na fizyke</h1>
+        
+        <div class="input-group">
+            <div class="input-field">
+                <label for="mass">Masa (kg)</label>
+                <input type="number" id="mass" value="100" step="1" min="0">
+            </div>
+            <div class="input-field">
+                <label for="length">Długość Belki (m)</label>
+                <input type="number" id="length" value="10" step="1" min="0">
+            </div>
+            <div class="input-field">
+                <label for="xa">Xa (m od lewej)</label>
+                <input type="number" id="xa" value="2" step="0.5" min="0">
+            </div>
+            <div class="input-field">
+                <label for="xb">Xb (m od prawej)</label>
+                <input type="number" id="xb" value="2" step="0.5" min="0">
+            </div>
+            <div class="input-field">
+                <label for="gravity">Grawitacja (m/s²)</label>
+                <input type="number" id="gravity" value="10" step="0.1" min="0">
+            </div>
+        </div>
 
+        <div class="error" id="errorMessage"></div>
+
+        <div class="visualization">
+            <svg id="beamSvg" width="100%" height="400" style="max-width: 900px;"></svg>
+        </div>
+
+        <div class="results">
+            <h3>Wyniki:</h3>
+            <p>Ciężar mg: <span id="weightResult">0</span> N</p>
+            <p>Siła Reakcji Ra: <span id="raResult">0</span> N</p>
+            <p>Siła Reakcji Rb: <span id="rbResult">0</span> N</p>
+        </div>
+    </div>
+
+
+
+
+
+
+
+
+    <script>
+        const inputs = {
+            mass: document.getElementById('mass'),
+            length: document.getElementById('length'),
+            xa: document.getElementById('xa'),
+            xb: document.getElementById('xb'),
+            gravity: document.getElementById('gravity')
+        };
+
+        const results = {
+            weight: document.getElementById('weightResult'),
+            ra: document.getElementById('raResult'),
+            rb: document.getElementById('rbResult')
+        };
+
+        const errorMessage = document.getElementById('errorMessage');
+        const svg = document.getElementById('beamSvg');
+
+        //  Skalowanie
+        const MIN_DISPLAY_WIDTH = 400; // Minimalna długość belki
+        const FORCE_SCALE = 60; // Domyślna wartość dla długości wektorów
+
+        function calculateForces() {
+            const m = parseFloat(inputs.mass.value);
+            const L = parseFloat(inputs.length.value);
+            const Xa = parseFloat(inputs.xa.value);
+            const Xb = parseFloat(inputs.xb.value);
+            const g = parseFloat(inputs.gravity.value);
+
+            //  Weryfikacja danych
+            if (Number.isNaN(m) || Number.isNaN(L) || Number.isNaN(Xa) || Number.isNaN(Xb) || Number.isNaN(g)) {
+                errorMessage.textContent = "Błąd: Proszę wprowadzić wszystkie wartości.";
+                return null;
+            }
+
+            if (m < 0 || L < 0 || Xa < 0 || Xb < 0 || g < 0) {
+                errorMessage.textContent = "Błąd: Wartości muszą być dodatnie";
+                return null;
+            }
+
+            if (Xa + Xb >= L) {
+                errorMessage.textContent = "Błąd: Podpory muszą mieć długości w zasięgu belki";
+                return null;
+            }
+
+            if (Xa > L/2 || Xb > L/2) {
+                errorMessage.textContent = "Błąd: Proszę wprowadzić wszystkie wartości.";
+                return null;
+            }
+
+
+            const mg = m * g;
+            const Rb = (mg * (L/2 - Xa)) / (L - Xa - Xb);
+            const Ra = mg - Rb;
+
+            return { mg, Ra, Rb };
+        }
+
+        function drawBeam() {
+            const forces = calculateForces();
+            if (!forces) return;
+
+            const { mg, Ra, Rb } = forces;
+            const L = parseFloat(inputs.length.value);
+            const Xa = parseFloat(inputs.xa.value);
+            const Xb = parseFloat(inputs.xb.value);
+
+            // Clear
+            svg.innerHTML = '';
+
+            // Kalkulacja zmiennych
+            const margin = 100;
+            const availableWidth = svg.clientWidth - 2 * margin;
+            const width = Math.max(MIN_DISPLAY_WIDTH, availableWidth);
+            const scale = width / L;
+            const height = 400;
+            const beamY = height / 2;
+            const beamHeight = 20; // Height of the rectangular beam
+
+            // Belka
+            const beam = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            beam.setAttribute("x", margin);
+            beam.setAttribute("y", beamY - beamHeight/2);
+            beam.setAttribute("width", width);
+            beam.setAttribute("height", beamHeight);
+            beam.setAttribute("fill", "white");
+            beam.setAttribute("stroke", "black");
+            beam.setAttribute("stroke-width", "2");
+            svg.appendChild(beam);
+
+            // Długości
+            function drawMeasurement(x1, x2, y, label) {
+                const line1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line1.setAttribute("x1", margin + x1 * scale);
+                line1.setAttribute("y1", y);
+                line1.setAttribute("x2", margin + x2 * scale);
+                line1.setAttribute("y2", y);
+                line1.setAttribute("stroke", "black");
+                line1.setAttribute("stroke-width", "1");
+                svg.appendChild(line1);
+
+                // X1 i X2
+                const markLength = 10;
+                ["x1", "x2"].forEach(x => {
+                    const mark = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    const xPos = margin + (x === "x1" ? x1 : x2) * scale;
+                    mark.setAttribute("x1", xPos);
+                    mark.setAttribute("y1", y - markLength/2);
+                    mark.setAttribute("x2", xPos);
+                    mark.setAttribute("y2", y + markLength/2);
+                    mark.setAttribute("stroke", "black");
+                    mark.setAttribute("stroke-width", "1");
+                    svg.appendChild(mark);
+                });
+
+                // Tekst
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", margin + (x1 + (x2 - x1)/2) * scale);
+                text.setAttribute("y", y - 10);
+                text.setAttribute("text-anchor", "middle");
+                text.setAttribute("fill", "black");
+                text.textContent = label;
+                svg.appendChild(text);
+            }
+
+            // Odległości
+            drawMeasurement(0, L, beamY + 150, `L = ${L}m`);
+            drawMeasurement(0, Xa, beamY + 100, `Xa = ${Xa}m`);
+            drawMeasurement(L - Xb, L, beamY + 100, `Xb = ${Xb}m`);
+
+            // Podpory
+            function drawSupport(x) {
+                const triangle = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                const size = 20;
+                const height = 40; 
+                const tx = margin + x * scale;
+                const triangleTop = beamY + beamHeight/2;
+                triangle.setAttribute("d", `M${tx-size},${triangleTop+height} L${tx},${triangleTop} L${tx+size},${triangleTop+height} Z`);
+                triangle.setAttribute("fill", "none");
+                triangle.setAttribute("stroke", "black");
+                triangle.setAttribute("stroke-width", "2");
+                svg.appendChild(triangle);
+
+                // Punkt odniesienia
+                if (x === Xa) {
+                    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    circle.setAttribute("cx", tx);
+                    circle.setAttribute("cy", triangleTop);
+                    circle.setAttribute("r", 5);
+                    circle.setAttribute("stroke", "black");
+                    circle.setAttribute("stroke-width", "1");
+                    circle.setAttribute("stroke-dasharray", "3,3");
+                    circle.setAttribute("fill", "none");
+                    svg.appendChild(circle);
+                }
+            }
+
+            drawSupport(Xa);
+            drawSupport(L - Xb);
+
+            // Wektory siły
+            function drawForce(x, y, force, color, label, length) {
+                const arrowLength = FORCE_SCALE * length * Math.log1p(Math.abs(force)) / Math.log1p(10000);
+                const tx = margin + x * scale;
+                const arrowY = y;
+                
+                // Linia kropkowana
+                const extension = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                extension.setAttribute("x1", tx);
+                extension.setAttribute("y1", arrowY - beamHeight/2);
+                extension.setAttribute("x2", tx);
+                extension.setAttribute("y2", arrowY - beamHeight/2 - 20);
+                extension.setAttribute("stroke", color);
+                extension.setAttribute("stroke-width", "1");
+                extension.setAttribute("stroke-dasharray", "4,4");
+                svg.appendChild(extension);
+
+                // Strzałka wektora
+                const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                const y1 = arrowY - beamHeight/2 - 20;
+                const y2 = force > 0 ? y1 - arrowLength : y1 + arrowLength;
+                
+                // Strzałki wypełnione
+                const arrowHead = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                const headSize = 8;
+                if (force > 0) {
+                    arrowHead.setAttribute("d", `M${tx-headSize},${y2+headSize} L${tx},${y2} L${tx+headSize},${y2+headSize} Z`);
+                } else {
+                    arrowHead.setAttribute("d", `M${tx-headSize},${y2-headSize} L${tx},${y2} L${tx+headSize},${y2-headSize} Z`);
+                }
+                arrowHead.setAttribute("fill", color);
+                svg.appendChild(arrowHead);
+
+                // Linie wektorów
+                arrow.setAttribute("d", `M${tx},${y1} L${tx},${y2}`);
+                arrow.setAttribute("stroke", color);
+                arrow.setAttribute("stroke-width", "2");
+                svg.appendChild(arrow);
+
+                // Wartość wektora
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", tx + 10);
+                text.setAttribute("y", (y1 + y2) / 2);
+                text.setAttribute("fill", color);
+                text.setAttribute("dominant-baseline", "middle");
+                text.textContent = `${label} = ${Math.abs(force).toFixed(1)}N`;
+                svg.appendChild(text);
+            }
+
+            //  Rysowanie wektorów w wizualizacji
+            drawForce(L/2,beamY+30, -mg, "blue", "mg", 2);  // mg (w dół)
+            drawForce(Xa,beamY, Ra, "red", "Ra", 1);      //  Ra (do góry)
+            drawForce(L - Xb,beamY, Rb, "red", "Rb", 1);  // Rb (do góry)
+
+            // Aktualizacja rezultatów
+            results.weight.textContent = mg.toFixed(1);
+            results.ra.textContent = Ra.toFixed(1);
+            results.rb.textContent = Rb.toFixed(1);
+            errorMessage.textContent = '';
+        }
+
+        // Aktualizacja danych przy zmianie wprowadzonych wartości
+        Object.values(inputs).forEach(input => {
+            input.addEventListener('input', drawBeam);
+        });
+
+        // Pierwotne rysowanie
+        drawBeam();
+
+        // Aktualizacja przy zmianie rozmiaru okna
+        window.addEventListener('resize', drawBeam);
+    </script>
+</body>
+</html>
